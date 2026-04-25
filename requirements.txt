@@ -1,0 +1,24 @@
+# ==============================================================
+# ROI_module - Requirements
+# ==============================================================
+# CÀI TRƯỚC (không qua pip):
+#   1) PyTorch + CUDA:
+#      pip install torch==1.13.1+cu117 torchvision==0.14.1+cu117 \
+#          --extra-index-url https://download.pytorch.org/whl/cu117
+#
+#   2) TensorRT:
+#      pip install tensorrt==8.5.3.1
+#
+#   3) torch2trt (từ source đi kèm):
+#      cd torch2trt_src && pip install -e .
+#
+#   4) YOLOX (từ source đi kèm):
+#      cd YOLOX && pip install -e .
+# ==============================================================
+
+numpy>=1.22,<1.24
+opencv-python>=4.5
+opencv-python-headless>=4.5
+pydicom>=2.3
+loguru>=0.6
+tqdm>=4.60
