@@ -265,14 +265,27 @@ class RoiExtractor:
 # DICOM utilities
 # ============================================================================
 def read_dicom(path):
-    """Read DICOM → (float32 array, metadata dict)."""
+    """Read DICOM → (float32 array, metadata dict).
+    
+    Detects PhotometricInterpretation (MONOCHROME1 / MONOCHROME2)
+    and logs the result. MONOCHROME1 images are inverted so that
+    pixel intensity matches the standard (bright = dense tissue).
+    """
     import pydicom
     ds = pydicom.dcmread(path)
     px = ds.pixel_array.astype(np.float32)
 
-    # MONOCHROME1 inversion
-    if getattr(ds, 'PhotometricInterpretation', '') == 'MONOCHROME1':
+    # Detect PhotometricInterpretation
+    photometric = str(getattr(ds, 'PhotometricInterpretation', 'UNKNOWN'))
+    is_monochrome1 = (photometric == 'MONOCHROME1')
+
+    if is_monochrome1:
+        logger.warning(f"  [MONO1] {os.path.basename(path)} → "
+                       f"PhotometricInterpretation=MONOCHROME1, inverting pixels")
         px = np.max(px) - px
+    else:
+        logger.info(f"  [MONO2] {os.path.basename(path)} → "
+                    f"PhotometricInterpretation={photometric}")
 
     # Windowing
     wc = getattr(ds, 'WindowCenter', None)
@@ -298,6 +311,8 @@ def read_dicom(path):
         'patient_id': str(getattr(ds, 'PatientID', 'Unknown')),
         'rows': int(ds.Rows),
         'columns': int(ds.Columns),
+        'photometric_interpretation': photometric,
+        'is_monochrome1_inverted': is_monochrome1,
     }
     return px, windowed, meta
 
@@ -307,7 +322,7 @@ def read_image(path):
     ext = Path(path).suffix.lower()
     if ext == '.dcm':
         return read_dicom(path)
-    # PNG / JPG
+    # PNG / JPG (no DICOM header → photometric info not available)
     img = cv2.imread(str(path), cv2.IMREAD_ANYDEPTH | cv2.IMREAD_GRAYSCALE)
     if img is None:
         raise ValueError(f"Cannot read: {path}")
@@ -318,8 +333,13 @@ def read_image(path):
         lo, hi = np.percentile(raw, 1), np.percentile(raw, 99)
         windowed = np.clip(raw, lo, hi)
         windowed = ((windowed - lo) / (hi - lo + 1e-8) * 255).astype(np.float32)
-    return raw, windowed, {'laterality': 'U', 'view': 'Unknown',
-                           'patient_id': 'Unknown'}
+    return raw, windowed, {
+        'laterality': 'U',
+        'view': 'Unknown',
+        'patient_id': 'Unknown',
+        'photometric_interpretation': 'N/A (non-DICOM)',
+        'is_monochrome1_inverted': False,
+    }
 
 
 # ============================================================================
@@ -400,6 +420,8 @@ def crop_single(extractor, img_path, out_dir, target_size=None,
         'output': out_path,
         'laterality': lat,
         'size': f"{ori_h}x{ori_w}",
+        'photometric_interpretation': meta.get('photometric_interpretation', 'N/A'),
+        'is_monochrome1_inverted': meta.get('is_monochrome1_inverted', False),
     }
 
 
@@ -476,9 +498,33 @@ def main():
     n = len(results)
     ok = sum(1 for r in results if 'error' not in r)
     avg = total_time / ok if ok else 0
-    print(f"\n{'='*50}")
+
+    # Photometric interpretation report
+    mono1_count = sum(1 for r in results
+                      if r.get('is_monochrome1_inverted', False))
+    mono2_count = sum(1 for r in results
+                      if 'error' not in r
+                      and r.get('photometric_interpretation') == 'MONOCHROME2')
+    other_count = ok - mono1_count - mono2_count
+
+    print(f"\n{'='*60}")
     print(f"SUMMARY: {ok}/{n} success, avg={avg:.1f}ms/image")
     print(f"Output: {args.output_dir}")
+    print(f"")
+    print(f"  Photometric Interpretation Report:")
+    print(f"  {'─'*40}")
+    print(f"  MONOCHROME1 (inverted)  : {mono1_count}")
+    print(f"  MONOCHROME2 (normal)    : {mono2_count}")
+    if other_count > 0:
+        print(f"  Other / non-DICOM       : {other_count}")
+    print(f"  {'─'*40}")
+    if mono1_count > 0:
+        print(f"  ⚠ {mono1_count} image(s) were MONOCHROME1 → pixels inverted before conversion")
+        # List individual MONOCHROME1 files
+        for r in results:
+            if r.get('is_monochrome1_inverted', False):
+                print(f"    - {r['file']}")
+    print(f"{'='*60}")
 
     # Save JSON
     json_path = os.path.join(args.output_dir, 'results.json')

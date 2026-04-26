@@ -83,6 +83,72 @@ python crop_roi.py \
     --backend pytorch
 ```
 
+### Tham số đầy đủ
+
+| Tham số | Mặc định | Mô tả |
+|---|---|---|
+| `--input-dir` | — | Thư mục chứa DICOM/PNG (tìm đệ quy) |
+| `--input-file` | — | File đơn lẻ (dùng thay `--input-dir`) |
+| `--output-dir` | `./output_roi` | Thư mục lưu kết quả |
+| `--weight` | **(bắt buộc)** | Đường dẫn file weight YOLOX (.pth) |
+| `--backend` | `auto` | `auto` / `trt` / `pytorch` |
+| `--input-size` | `416 416` | Kích thước input cho YOLOX |
+| `--conf-thres` | `0.5` | Ngưỡng confidence |
+| `--nms-thres` | `0.9` | Ngưỡng NMS |
+| `--target-size` | — | Resize output (H W), vd: `1536 1024` |
+| `--flip-left` | `false` | Lật ảnh vú trái (laterality=L) |
+| `--save-bbox-viz` | `false` | Lưu ảnh bounding box visualization |
+
+## Xử lý DICOM PhotometricInterpretation
+
+Khi đọc file DICOM, chương trình **tự động phát hiện** `PhotometricInterpretation` của từng ảnh:
+
+| Giá trị | Ý nghĩa | Xử lý |
+|---|---|---|
+| **MONOCHROME1** | Pixel thấp = mô đặc (sáng), pixel cao = nền (tối) | **Tự động invert** (`max - pixel`) trước khi convert |
+| **MONOCHROME2** | Pixel cao = mô đặc (sáng) — chuẩn hiển thị | Giữ nguyên, không invert |
+
+### Output báo cáo
+
+Sau khi xử lý xong, chương trình in **Photometric Interpretation Report**:
+
+```
+============================================================
+SUMMARY: 21/21 success, avg=4.3ms/image
+Output: /path/to/output
+
+  Photometric Interpretation Report:
+  ────────────────────────────────────────
+  MONOCHROME1 (inverted)  : 5
+  MONOCHROME2 (normal)    : 16
+  ────────────────────────────────────────
+  ⚠ 5 image(s) were MONOCHROME1 → pixels inverted before conversion
+    - IM-0001-0001.dcm
+    - IM-0001-0003.dcm
+    - ...
+============================================================
+```
+
+### Thông tin trong `results.json`
+
+Mỗi file trong `results.json` chứa 2 trường mới:
+
+```json
+{
+  "file": "IM-0001-0001.dcm",
+  "method": "YOLOX",
+  "bbox": [1174, 238, 2414, 3162],
+  "photometric_interpretation": "MONOCHROME1",
+  "is_monochrome1_inverted": true,
+  "..."
+}
+```
+
+- `photometric_interpretation`: Giá trị gốc từ DICOM header (`MONOCHROME1`, `MONOCHROME2`, hoặc `N/A (non-DICOM)` cho file PNG/JPG)
+- `is_monochrome1_inverted`: `true` nếu ảnh đã bị invert trước khi convert sang PNG
+
+> ⚠️ **Lưu ý:** Nếu ảnh gốc là **MONOCHROME1**, file PNG đầu ra đã được invert để hiển thị đúng (mô đặc = sáng). Không cần invert lại khi sử dụng.
+
 ## Yêu cầu
 - NVIDIA GPU + CUDA >= 11.7
 - TensorRT >= 8.5
