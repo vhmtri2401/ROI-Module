@@ -280,7 +280,7 @@ def read_dicom(path):
     is_monochrome1 = (photometric == 'MONOCHROME1')
 
     if is_monochrome1:
-        logger.warning(f"  [MONO1] {os.path.basename(path)} -> "
+        logger.info(f"  [MONO1] {os.path.basename(path)} -> "
                        f"PhotometricInterpretation=MONOCHROME1, inverting pixels")
         max_val = float(np.max(px))
         px = max_val - px
