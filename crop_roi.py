@@ -265,7 +265,7 @@ class RoiExtractor:
 # DICOM utilities
 # ============================================================================
 def read_dicom(path):
-    """Read DICOM → (float32 array, metadata dict).
+    """Read DICOM -> (float32 array, metadata dict).
     
     Detects PhotometricInterpretation (MONOCHROME1 / MONOCHROME2)
     and logs the result. MONOCHROME1 images are inverted so that
@@ -493,7 +493,7 @@ def main():
                             save_viz=args.save_bbox_viz)
             results.append(r)
             total_time += r['time_ms']
-            logger.info(f"  → {r['method']} bbox={r['bbox']} "
+            logger.info(f"  -> {r['method']} bbox={r['bbox']} "
                         f"area={r['area_pct']}% conf={r['conf']} "
                         f"t={r['time_ms']}ms")
         except Exception as e:
@@ -518,14 +518,14 @@ def main():
     print(f"Output: {args.output_dir}")
     print(f"")
     print(f"  Photometric Interpretation Report:")
-    print(f"  {'─'*40}")
+    print(f"  {'-'*40}")
     print(f"  MONOCHROME1 (inverted)  : {mono1_count}")
     print(f"  MONOCHROME2 (normal)    : {mono2_count}")
     if other_count > 0:
         print(f"  Other / non-DICOM       : {other_count}")
-    print(f"  {'─'*40}")
+    print(f"  {'-'*40}")
     if mono1_count > 0:
-        print(f"  ⚠ {mono1_count} image(s) were MONOCHROME1 → pixels inverted before conversion")
+        print(f"  ! {mono1_count} image(s) were MONOCHROME1 -> pixels inverted + WC adjusted")
         # List individual MONOCHROME1 files
         for r in results:
             if r.get('is_monochrome1_inverted', False):
