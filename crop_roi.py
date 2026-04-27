@@ -280,12 +280,14 @@ def read_dicom(path):
     is_monochrome1 = (photometric == 'MONOCHROME1')
 
     if is_monochrome1:
-        logger.warning(f"  [MONO1] {os.path.basename(path)} → "
+        logger.warning(f"  [MONO1] {os.path.basename(path)} -> "
                        f"PhotometricInterpretation=MONOCHROME1, inverting pixels")
-        px = np.max(px) - px
+        max_val = float(np.max(px))
+        px = max_val - px
     else:
-        logger.info(f"  [MONO2] {os.path.basename(path)} → "
+        logger.info(f"  [MONO2] {os.path.basename(path)} -> "
                     f"PhotometricInterpretation={photometric}")
+        max_val = None
 
     # Windowing
     wc = getattr(ds, 'WindowCenter', None)
@@ -295,6 +297,10 @@ def read_dicom(path):
             wc, ww = float(wc[0]), float(ww[0])
         else:
             wc, ww = float(wc), float(ww)
+        # After MONO1 inversion, Window Center must be adjusted
+        # to match the inverted pixel range: new_WC = max - old_WC
+        if is_monochrome1 and max_val is not None:
+            wc = max_val - wc
         lo, hi = wc - ww / 2, wc + ww / 2
         windowed = np.clip(px, lo, hi)
         windowed = ((windowed - lo) / (hi - lo + 1e-8) * 255).astype(np.float32)
@@ -320,7 +326,7 @@ def read_dicom(path):
 def read_image(path):
     """Read PNG/DICOM → (raw_float32, windowed_float32, meta)."""
     ext = Path(path).suffix.lower()
-    if ext == '.dcm':
+    if ext in ('.dcm', '.dicom'):
         return read_dicom(path)
     # PNG / JPG (no DICOM header → photometric info not available)
     img = cv2.imread(str(path), cv2.IMREAD_ANYDEPTH | cv2.IMREAD_GRAYSCALE)
@@ -429,7 +435,7 @@ def find_images(input_dir=None, input_file=None):
     """Find all DICOM/PNG files."""
     if input_file:
         return [input_file]
-    patterns = ['**/*.dcm', '**/*.png', '**/*.jpg', '**/*.jpeg']
+    patterns = ['**/*.dcm', '**/*.dicom', '**/*.png', '**/*.jpg', '**/*.jpeg']
     files = []
     for p in patterns:
         files.extend(glob.glob(os.path.join(input_dir, p), recursive=True))
